@@ -1,0 +1,267 @@
+
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8" />
+    <title>sphere internals &#8212; sphere 2.15-beta documentation</title>
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Python API" href="python_api.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="python_api.html" title="Python API"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">sphere 2.15-beta documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="sphere-internals">
+<h1>sphere internals<a class="headerlink" href="#sphere-internals" title="Permalink to this headline">¶</a></h1>
+<p>The <em>sphere</em> executable has the following options:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>$ ../../sphere --help
+../../sphere: particle dynamics simulator
+Usage: ../../sphere [OPTION[S]]... [FILE1 ...]
+Options:
+-h, --help		print help
+-V, --version		print version information and exit
+-q, --quiet		suppress status messages to stdout
+-d &lt;device&gt;		execute on device with specified id
+-n, --dry		show key experiment parameters and quit
+-f, --fluid		simulate fluid between particles
+-r, --render		render input files to images instead of
+            		simulating the temporal evolution
+-dc, --dont-check	don&#39;t check values before running
+
+Raytracer (-r) specific options:
+-m &lt;method&gt; &lt;maxval&gt; [-l &lt;lower cutoff val&gt;], or
+--method &lt;method&gt; &lt;maxval&gt; [-l &lt;lower cutoff val&gt;]
+	color visualization method, possible values:
+	normal, pres, vel, angvel, xdisp, angpos
+	&#39;normal&#39; is the default mode
+	if -l is appended, don&#39;t render particles with value below
+-c, --contacts		Print a list of particle-particle contacts
+</pre></div>
+</div>
+<p>The most common way to invoke <em>sphere</em> is however via the Python API (e.g. <a class="reference internal" href="python_api.html#sphere.run" title="sphere.run"><code class="xref py py-func docutils literal notranslate"><span class="pre">sphere.run()</span></code></a>, <a class="reference internal" href="python_api.html#sphere.render" title="sphere.render"><code class="xref py py-func docutils literal notranslate"><span class="pre">sphere.render()</span></code></a>, etc.).</p>
+<p>subsection{The <em>sphere</em> algorithm}
+label{subsec:spherealgo}
+The <em>sphere</em>-binary is launched from the system terminal by passing the simulation ID as an input parameter; texttt{./sphere_&lt;architecture&gt; &lt;simulation_ID&gt;}. The sequence of events in the program is the following:
+#. System check, including search for NVIDIA CUDA compatible devices (texttt{main.cpp}).</p>
+<ol class="arabic simple">
+<li><p>Initial data import from binary input file (texttt{main.cpp}).</p></li>
+<li><p>Allocation of memory for all host variables (particles, grid, walls, etc.) (texttt{main.cpp}).</p></li>
+<li><p>Continued import from binary input file (texttt{main.cpp}).</p></li>
+<li><p>Control handed to GPU-specific function texttt{gpuMain(ldots)} (texttt{device.cu}).</p></li>
+<li><p>Memory allocation of device memory (texttt{device.cu}).</p></li>
+<li><p>Transfer of data from host to device variables (texttt{device.cu}).</p></li>
+<li><p>Initialization of Thrustfootnote{url{<a class="reference external" href="https://code.google.com/p/thrust/">https://code.google.com/p/thrust/</a>}} radix sort configuration (texttt{device.cu}).</p></li>
+<li><p>Calculation of GPU workload configuration (thread and block layout) (texttt{device.cu}).</p></li>
+<li><p>Status and data written to verb”&lt;simulation_ID&gt;.status.dat” and verb”&lt;simulation_ID&gt;.output0.bin”, both located in texttt{output/} folder (texttt{device.cu}).</p></li>
+<li><p>Main loop (while texttt{time.current &lt;= time.total}) (functions called in texttt{device.cu}, function definitions in seperate files). Each kernel call is wrapped in profiling- and error exception handling functions:</p></li>
+</ol>
+<blockquote>
+<div><ol class="arabic">
+<li><p>label{loopstart}CUDA thread synchronization point.</p></li>
+<li><p>texttt{calcParticleCellID&lt;&lt;&lt;,&gt;&gt;&gt;(ldots)}: Particle-grid hash value calculation (texttt{sorting.cuh}).</p></li>
+<li><p>CUDA thread synchronization point.</p></li>
+<li><p>texttt{thrust::sort_by_key(ldots)}: Thrust radix sort of particle-grid hash array (texttt{device.cu}).</p></li>
+<li><p>texttt{cudaMemset(ldots)}: Writing zero value (texttt{0xffffffff}) to empty grid cells (texttt{device.cu}).</p></li>
+<li><p>texttt{reorderArrays&lt;&lt;&lt;,&gt;&gt;&gt;(ldots)}: Reordering of particle arrays, based on sorted particle-grid-hash values (texttt{sorting.cuh}).</p></li>
+<li><p>CUDA thread synchronization point.</p></li>
+<li><p>Optional: texttt{topology&lt;&lt;&lt;,&gt;&gt;&gt;(ldots)}: If particle contact history is required by the contact model, particle contacts are identified, and stored per particle. Previous, now non-existant contacts are discarded (texttt{contactsearch.cuh}).</p></li>
+<li><p>CUDA thread synchronization point.</p></li>
+<li><p>texttt{interact&lt;&lt;&lt;,&gt;&gt;&gt;(ldots)}: For each particle: Search of contacts in neighbor cells, processing of optional collisions and updating of resulting forces and torques. Values are written to read/write device memory arrays (texttt{contactsearch.cuh}).</p></li>
+<li><p>CUDA thread synchronization point.</p></li>
+<li><p>texttt{integrate&lt;&lt;&lt;,&gt;&gt;&gt;(ldots)}: Updating of spatial degrees of freedom by a second-order Taylor series expansion integration (texttt{integration.cuh}).</p></li>
+<li><p>CUDA thread synchronization point.</p></li>
+<li><p>texttt{summation&lt;&lt;&lt;,&gt;&gt;&gt;(ldots)}: Particle contributions to the net force on the walls are summated (texttt{integration.cuh}).</p></li>
+<li><p>CUDA thread synchronization point.</p></li>
+<li><p>texttt{integrateWalls&lt;&lt;&lt;,&gt;&gt;&gt;(ldots)}: Updating of spatial degrees of freedom of walls (texttt{integration.cuh}).</p></li>
+<li><p>Update of timers and loop-related counters (e.g. texttt{time.current}), (texttt{device.cu}).</p></li>
+<li><p>If file output interval is reached:</p>
+<blockquote>
+<div><blockquote>
+<div><p>item Optional write of data to output binary (verb”&lt;simulation_ID&gt;.output#..bin”), (texttt{file_io.cpp}).
+item Update of verb”&lt;simulation_ID&gt;.status#..bin” (texttt{device.cu}).</p>
+</div></blockquote>
+<p>item Return to point ref{loopstart}, unless texttt{time.current &gt;= time.total}, in which case the program continues to point ref{loopend}.</p>
+</div></blockquote>
+</li>
+</ol>
+</div></blockquote>
+<ol class="arabic simple">
+<li><p>label{loopend}Liberation of device memory (texttt{device.cu}).</p></li>
+<li><p>Control returned to texttt{main(ldots)}, liberation of host memory (texttt{main.cpp}).</p></li>
+<li><p>End of program, return status equal to zero (0) if no problems where encountered.</p></li>
+</ol>
+<div class="section" id="numerical-algorithm">
+<h2>Numerical algorithm<a class="headerlink" href="#numerical-algorithm" title="Permalink to this headline">¶</a></h2>
+<p>The <em>sphere</em>-binary is launched from the system terminal by passing the simulation ID as an input parameter; texttt{./sphere_&lt;architecture&gt; &lt;simulation_ID&gt;}. The sequence of events in the program is the following:</p>
+<ol class="arabic simple">
+<li><p>System check, including search for NVIDIA CUDA compatible devices (texttt{main.cpp}).</p></li>
+<li><p>Initial data import from binary input file (texttt{main.cpp}).</p></li>
+<li><p>Allocation of memory for all host variables (particles, grid, walls, etc.) (texttt{main.cpp}).</p></li>
+<li><p>Continued import from binary input file (texttt{main.cpp}).</p></li>
+<li><p>Control handed to GPU-specific function texttt{gpuMain(ldots)} (texttt{device.cu}).</p></li>
+<li><p>Memory allocation of device memory (texttt{device.cu}).</p></li>
+<li><p>Transfer of data from host to device variables (texttt{device.cu}).</p></li>
+<li><p>Initialization of Thrustfootnote{url{<a class="reference external" href="https://code.google.com/p/thrust/">https://code.google.com/p/thrust/</a>}} radix sort configuration (texttt{device.cu}).</p></li>
+<li><p>Calculation of GPU workload configuration (thread and block layout) (texttt{device.cu}).</p></li>
+<li><p>Status and data written to verb”&lt;simulation_ID&gt;.status.dat” and verb”&lt;simulation_ID&gt;.output0.bin”, both located in texttt{output/} folder (texttt{device.cu}).</p></li>
+<li><p>Main loop (while texttt{time.current &lt;= time.total}) (functions called in texttt{device.cu}, function definitions in seperate files). Each kernel call is wrapped in profiling- and error exception handling functions:</p></li>
+</ol>
+<blockquote>
+<div><ol class="arabic">
+<li><p>label{loopstart}CUDA thread synchronization point.</p></li>
+<li><p>texttt{calcParticleCellID&lt;&lt;&lt;,&gt;&gt;&gt;(ldots)}: Particle-grid hash value calculation (texttt{sorting.cuh}).</p></li>
+<li><p>CUDA thread synchronization point.</p></li>
+<li><p>texttt{thrust::sort_by_key(ldots)}: Thrust radix sort of particle-grid hash array (texttt{device.cu}).</p></li>
+<li><p>texttt{cudaMemset(ldots)}: Writing zero value (texttt{0xffffffff}) to empty grid cells (texttt{device.cu}).</p></li>
+<li><p>texttt{reorderArrays&lt;&lt;&lt;,&gt;&gt;&gt;(ldots)}: Reordering of particle arrays, based on sorted particle-grid-hash values (texttt{sorting.cuh}).</p></li>
+<li><p>CUDA thread synchronization point.</p></li>
+<li><p>Optional: texttt{topology&lt;&lt;&lt;,&gt;&gt;&gt;(ldots)}: If particle contact history is required by the contact model, particle contacts are identified, and stored per particle. Previous, now non-existant contacts are discarded (texttt{contactsearch.cuh}).</p></li>
+<li><p>CUDA thread synchronization point.</p></li>
+<li><p>texttt{interact&lt;&lt;&lt;,&gt;&gt;&gt;(ldots)}: For each particle: Search of contacts in neighbor cells, processing of optional collisions and updating of resulting forces and torques. Values are written to read/write device memory arrays (texttt{contactsearch.cuh}).</p></li>
+<li><p>CUDA thread synchronization point.</p></li>
+<li><p>texttt{integrate&lt;&lt;&lt;,&gt;&gt;&gt;(ldots)}: Updating of spatial degrees of freedom by a second-order Taylor series expansion integration (texttt{integration.cuh}).</p></li>
+<li><p>CUDA thread synchronization point.</p></li>
+<li><p>texttt{summation&lt;&lt;&lt;,&gt;&gt;&gt;(ldots)}: Particle contributions to the net force on the walls are summated (texttt{integration.cuh}).</p></li>
+<li><p>CUDA thread synchronization point.</p></li>
+<li><p>texttt{integrateWalls&lt;&lt;&lt;,&gt;&gt;&gt;(ldots)}: Updating of spatial degrees of freedom of walls (texttt{integration.cuh}).</p></li>
+<li><p>Update of timers and loop-related counters (e.g. texttt{time.current}), (texttt{device.cu}).</p></li>
+<li><p>If file output interval is reached:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Optional write of data to output binary (verb”&lt;simulation_ID&gt;.output#..bin”), (texttt{file_io.cpp}).</p></li>
+<li><p>Update of verb”&lt;simulation_ID&gt;.status#..bin” (texttt{device.cu}).</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p>Return to point ref{loopstart}, unless texttt{time.current &gt;= time.total}, in which case the program continues to point ref{loopend}.</p></li>
+</ol>
+</div></blockquote>
+<ol class="arabic simple">
+<li><p>label{loopend}Liberation of device memory (texttt{device.cu}).</p></li>
+<li><p>Control returned to texttt{main(ldots)}, liberation of host memory (texttt{main.cpp}).</p></li>
+<li><p>End of program, return status equal to zero (0) if no problems where encountered.</p></li>
+</ol>
+<p>The length of the computational time steps (texttt{time.dt}) is calculated via equation ref{eq:dt}, where length of the time intervals is defined by:</p>
+<div class="math">
+<p><img src="_images/math/e721d97e515c11c9ef7209be37e1c98029ffdfa2.png" alt="\Delta t = 0.075 \min \left( m/\max(k_n,k_t) \right)"/></p>
+</div><p>where <img class="math" src="_images/math/e9bc7da808d33a16a8347f27a519bd067186aa66.png" alt="m"/> is the particle mass, and <img class="math" src="_images/math/9630132210b904754c9ab272b61cb527d12263ca.png" alt="k"/> are the elastic stiffnesses.
+The time step is set by this relationship in <code class="xref py py-func docutils literal notranslate"><span class="pre">initTemporal()</span></code>.
+This equation ensures that the elastic wave (traveling at the speed of sound) is resolved a number of times while traveling through the smallest particle.</p>
+<p>subsubsection{Host and device memory types}
+label{subsubsec:memorytypes}
+A full, listed description of the <em>sphere</em> source code variables can be found in appendix ref{apx:SourceCodeVariables}, page pageref{apx:SourceCodeVariables}. There are three types of memory types employed in the <em>sphere</em> source code, with different characteristics and physical placement in the system (figure ref{fig:memory}).</p>
+<p>The floating point precision operating internally in <em>sphere</em> is defined in texttt{datatypes.h}, and can be either single (texttt{float}), or double (texttt{double}). Depending on the GPU, the calculations are performed about double as fast in single precision, in relation to double precision. In dense granular configuraions, the double precision however results in greatly improved numerical stability, and is thus set as the default floating point precision. The floating point precision is stored as the type definitions texttt{Float}, texttt{Float3} and texttt{Float4}. The floating point values in the in- and output datafiles are emph{always} written in double precision, and, if necessary, automatically converted by <em>sphere</em>.</p>
+<p>Three-dimensional variables (e.g. spatial vectors in <cite>E^3</cite>) are in global memory stored as texttt{Float4} arrays, since these read and writes can be coalesced, while e.g. texttt{float3}’s cannot. This alone yields a <cite>sim`20</cite>times` performance boost, even though it involves 25% more (unused) data.</p>
+<p>paragraph{Host memory} is the main random-access computer memory (RAM), i.e. read and write memory accessible by CPU processes, but inaccessible by CUDA kernels executed on the device.</p>
+<p>paragraph{Device memory} is the main, global device memory. It resides off-chip on the GPU, often in the form of 1–6 GB DRAM. The read/write access from the CUDA kernels is relatively slow. The arrays residing in (global) device memory are prefixed by <code class="docutils literal notranslate"><span class="pre">dev_</span></code> in the source code.</p>
+<p>marginpar{Todo: Expand section on device memory types}</p>
+<p>paragraph{Constant memory} values cannot be changed after they are set, and are used for scalars or small vectors. Values are set in the <code class="docutils literal notranslate"><span class="pre">transferToConstantMemory(...)}</span></code> function, called in the beginning of texttt{gpuMain(ldots)} in texttt{device.cu}. Constant memory variables have a global scope, and are prefixed by <code class="docutils literal notranslate"><span class="pre">devC_</span></code> in the source code.</p>
+<p>%subsection{The main loop}
+%label{subsec:mainloop}
+%The <em>sphere</em> software calculates particle movement and rotation based on the forces applied to it, by application of Newton’s law of motion (Newton’s second law with constant particle mass: <cite>F_{mathrm{net}} = m cdot a_{mathrm{cm}}</cite>). This is done in a series of algorithmic steps, see list on page pageref{loopstart}. The steps are explained in the following sections with reference to the <em>sphere</em>-source file; texttt{sphere.cu}. The intent with this document is emph{not} to give a full theoretical background of the methods, but rather how the software performs the calculations.</p>
+<p>subsection{Performance}
+marginpar{Todo: insert graph of performance vs. np and performance vs. <cite>Delta t</cite>}.
+subsubsection{Particles and computational time}</p>
+<p>subsection{Compilation}
+label{subsec:compilation}
+An important note is that the texttt{C} examples of the NVIDIA CUDA SDK should be compiled before <em>sphere</em>. Consult the <cite>Getting started guide</cite>, supplied by Nvidia for details on this step.</p>
+<p><em>sphere</em> is supplied with several Makefiles, which automate the compilation process. To compile all components, open a shell, go to the texttt{src/} subfolder and type texttt{make}. The GNU Make will return the parameters passed to the individual CUDA and GNU compilers (texttt{nvcc} and texttt{gcc}). The resulting binary file (texttt{sphere}) is placed in the <em>sphere</em> root folder. <code class="docutils literal notranslate"><span class="pre">src/Makefile</span></code> will also compile the raytracer.</p>
+</div>
+<div class="section" id="c-reference">
+<h2>C++ reference<a class="headerlink" href="#c-reference" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="_CPPv43DEM">
+<span id="_CPPv33DEM"></span><span id="_CPPv23DEM"></span><span id="DEM"></span><span class="target" id="classDEM"></span><em class="property">class </em><code class="sig-name descname">DEM</code><a class="headerlink" href="#_CPPv43DEM" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">sphere internals</a><ul>
+<li><a class="reference internal" href="#numerical-algorithm">Numerical algorithm</a></li>
+<li><a class="reference internal" href="#c-reference">C++ reference</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="python_api.html"
+                        title="previous chapter">Python API</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/sphere_internals.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="python_api.html" title="Python API"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">sphere 2.15-beta documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2014, Anders Damsgaard.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 2.2.0.
+    </div>
+  </body>
+</html>

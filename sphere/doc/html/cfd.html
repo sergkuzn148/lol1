@@ -1,0 +1,598 @@
+
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fluid simulation and particle-fluid interaction &#8212; sphere 2.15-beta documentation</title>
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Python API" href="python_api.html" />
+    <link rel="prev" title="Discrete element method" href="dem.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="python_api.html" title="Python API"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="dem.html" title="Discrete element method"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">sphere 2.15-beta documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="fluid-simulation-and-particle-fluid-interaction">
+<h1>Fluid simulation and particle-fluid interaction<a class="headerlink" href="#fluid-simulation-and-particle-fluid-interaction" title="Permalink to this headline">¶</a></h1>
+<p>A new and experimental addition to <em>sphere</em> is the ability to simulate a mixture
+of particles and a Newtonian fluid. The fluid is simulated using an Eulerian
+continuum approach, using a custom CUDA solver for GPU computation. This
+approach allows for fast simulations due to the limited need for GPU-CPU
+communications, as well as a flexible code base.</p>
+<p>The following sections will describe the theoretical background, as well as the
+solution procedure and the numerical implementation.</p>
+<div class="section" id="derivation-of-the-navier-stokes-equations-with-porosity">
+<h2>Derivation of the Navier Stokes equations with porosity<a class="headerlink" href="#derivation-of-the-navier-stokes-equations-with-porosity" title="Permalink to this headline">¶</a></h2>
+<p>Following the outline presented by <a class="reference external" href="http://www.cimec.org.ar/ojs/index.php/mc/article/view/486/464">Limache and Idelsohn (2006)</a>, the
+continuity equation for an incompressible fluid material is given by:</p>
+<div class="math">
+<p><img src="_images/math/2ebe57143bfac54b7d13d59297affe6ce4e0490e.png" alt="\nabla \cdot \boldsymbol{v} = 0"/></p>
+</div><p>and the momentum equation:</p>
+<div class="math">
+<p><img src="_images/math/321ea56397cc9e6cf05b895883258025af46a885.png" alt="\rho \frac{\partial \boldsymbol{v}}{\partial t}
++ \rho (\boldsymbol{v} \cdot \nabla \boldsymbol{v})
+= \nabla \cdot \boldsymbol{\sigma}
+- \boldsymbol{f}^i
++ \rho \boldsymbol{g}"/></p>
+</div><p>Here, <img class="math" src="_images/math/510c4529ac8afe31da328659a626a9a5cd725133.png" alt="\boldsymbol{v}"/> is the fluid velocity, <img class="math" src="_images/math/27dc86f9f1b1c3435b2403a869b5870c582facea.png" alt="\rho"/> is the
+fluid density, <img class="math" src="_images/math/af12689d82b180a54e5362ae95a2865118c0331c.png" alt="\boldsymbol{\sigma}"/> is the <a class="reference external" href="https://en.wikipedia.org/wiki/Cauchy_stress_tensor">Cauchy stress tensor</a>,
+<img class="math" src="_images/math/48bdffae0ccbc9ae14526c24bde0b5ce156d6b46.png" alt="\boldsymbol{f}^i"/> is the particle-fluid interaction vector and
+<img class="math" src="_images/math/bb8cd3151bb302b4dbd7107bc23240b7a1f86d80.png" alt="\boldsymbol{g}"/> is the gravitational acceleration. For incompressible
+Newtonian fluids, the Cauchy stress is given by:</p>
+<div class="math">
+<p><img src="_images/math/70f3b255df6b95c6eccdddaf26e814efbb21a482.png" alt="\boldsymbol{\sigma} = -p \boldsymbol{I} + \boldsymbol{\tau}"/></p>
+</div><p><img class="math" src="_images/math/141bbefb74014fc5e43499901bf78607ae335583.png" alt="p"/> is the fluid pressure, <img class="math" src="_images/math/6076ef1829231552335cb26d3c29933d537bafe1.png" alt="\boldsymbol{I}"/> is the identity
+tensor, and <img class="math" src="_images/math/e8638c03875910e3365dac845714a84af13cffeb.png" alt="\boldsymbol{\tau}"/> is the deviatoric stress tensor, given
+by:</p>
+<div class="math">
+<p><img src="_images/math/36e047f01517c90d6122694bfff5f7f18630b788.png" alt="\boldsymbol{\tau} =
+\mu_f \nabla \boldsymbol{v}
++ \mu_f (\nabla \boldsymbol{v})^T"/></p>
+</div><p>By using the following vector identities:</p>
+<div class="math">
+<p><img src="_images/math/80f029074944a89a2802f326da11b4fea65b1b2d.png" alt="\nabla \cdot (p \boldsymbol{I}) = \nabla p
+
+\nabla \cdot (\nabla \boldsymbol{v}) = \nabla^2 \boldsymbol{v}
+
+\nabla \cdot (\nabla \boldsymbol{v})^T
+= \nabla (\nabla \cdot \boldsymbol{v})"/></p>
+</div><p>the deviatoric component of the Cauchy stress tensor simplifies to the
+following, assuming that spatial variations in the viscosity can be neglected:</p>
+<div class="math">
+<p><img src="_images/math/e525a4923850629a39c3abc0a0b46b85eeb8eab6.png" alt="= -\nabla p
++ \mu_f \nabla^2 \boldsymbol{v}"/></p>
+</div><p>Since we are dealing with fluid flow in a porous medium, additional terms are
+introduced to the equations for conservation of mass and momentum. In the
+following, the equations are derived for the first spatial component. The
+solution for the other components is trivial.</p>
+<p>The porosity value (in the saturated porous medium the volumetric fraction of
+the fluid phase) denoted <img class="math" src="_images/math/fffd2357ee88a9c50ba9e831ed64c39c73d54a07.png" alt="\phi"/> is incorporated in the continuity and
+momentum equations. The continuity equation becomes:</p>
+<div class="math">
+<p><img src="_images/math/b9068a1e88690142dca1c6a74091348e8064b9ca.png" alt="\frac{\partial \phi}{\partial t}
++ \nabla \cdot (\phi \boldsymbol{v}) = 0"/></p>
+</div><p>For the <img class="math" src="_images/math/888f7c323ac0341871e867220ae2d76467d74d6e.png" alt="x"/> component, the Lagrangian formulation of the momentum equation
+with a body force <img class="math" src="_images/math/589f894e7bddf7ae1a4b9dcb40762fc87b0f01f3.png" alt="\boldsymbol{f}"/> becomes:</p>
+<div class="math">
+<p><img src="_images/math/5470b3e5faeecda0a5d86db97b337c268cbe1a46.png" alt="\frac{D (\phi v_x)}{D t}
+= \frac{1}{\rho} \left[ \nabla \cdot (\phi \boldsymbol{\sigma}) \right]_x
+- \frac{1}{\rho} f^i_x
++ \phi g"/></p>
+</div><p>In the Eulerian formulation, an advection term is added, and the Cauchy stress
+tensor is represented as isotropic and deviatoric components individually:</p>
+<div class="math">
+<p><img src="_images/math/d860033316d4db0b552f2e4441ef5b3fd2b58d76.png" alt="\frac{\partial (\phi v_x)}{\partial t}
++ \boldsymbol{v} \cdot \nabla (\phi v_x)
+= \frac{1}{\rho} \left[ \nabla \cdot (-\phi p \boldsymbol{I})
++ \phi \boldsymbol{\tau}) \right]_x
+- \frac{1}{\rho} f^i_x
++ \phi g_x"/></p>
+</div><p>Using vector identities to rewrite the advection term, and expanding the fluid
+stress tensor term:</p>
+<div class="math">
+<p><img src="_images/math/bd5938eba6625b76607b0ac2ceb37453e8a67105.png" alt="\frac{\partial (\phi v_x)}{\partial t}
++ \nabla \cdot (\phi v_x \boldsymbol{v})
+- \phi v_x (\nabla \cdot \boldsymbol{v})
+= \frac{1}{\rho} \left[ -\nabla \phi p \right]_x
++ \frac{1}{\rho} \left[ \nabla \cdot (\phi \boldsymbol{\tau}) \right]_x
+- \frac{1}{\rho} f^i_x
++ \phi g_x"/></p>
+</div><p>Spatial variations in the porosity are neglected,</p>
+<div class="math">
+<p><img src="_images/math/a349ae092fc26f86f454abfacb40ce0ed9cd2ac9.png" alt="\nabla \phi := 0"/></p>
+</div><p>and the pressure is attributed to the fluid phase alone (model B in Zhu et al.
+2007 and Zhou et al. 2010). The divergence of fluid velocities is defined to be
+zero:</p>
+<div class="math">
+<p><img src="_images/math/b2d579d8b04e5bb645239dd2e5d8dfe4d8d7b472.png" alt="\nabla \cdot \boldsymbol{v} := 0"/></p>
+</div><p>With these assumptions, the momentum equation simplifies to:</p>
+<div class="math">
+<p><img src="_images/math/857e62557f767500fdff1bb017a6a5771a10af6f.png" alt="\frac{\partial (\phi v_x)}{\partial t}
++ \nabla \cdot (\phi v_x \boldsymbol{v})
+= -\frac{1}{\rho} \frac{\partial p}{\partial x}
++ \frac{1}{\rho} \left[ \nabla \cdot (\phi \boldsymbol{\tau}) \right]_x
+- \frac{1}{\rho} f^i_x
++ \phi g_x"/></p>
+</div><p>The remaining part of the advection term is for the <img class="math" src="_images/math/888f7c323ac0341871e867220ae2d76467d74d6e.png" alt="x"/> component
+found as:</p>
+<div class="math">
+<p><img src="_images/math/61a00fe9b19055ba2dd54bc5792a1993c782967a.png" alt="\nabla \cdot (\phi v_x \boldsymbol{v}) =
+\left[
+    \frac{\partial}{\partial x},
+    \frac{\partial}{\partial y},
+    \frac{\partial}{\partial z}
+\right]
+\left[
+    \begin{array}{c}
+        \phi v_x v_x\\
+        \phi v_x v_y\\
+        \phi v_x v_z\\
+    \end{array}
+\right]
+=
+\frac{\partial (\phi v_x v_x)}{\partial x} +
+\frac{\partial (\phi v_x v_y)}{\partial y} +
+\frac{\partial (\phi v_x v_z)}{\partial z}"/></p>
+</div><p>The deviatoric stress tensor is in this case symmetrical, i.e. <img class="math" src="_images/math/011d677089639d8644f24fbf40d370cecdeddf3f.png" alt="\tau_{ij}
+= \tau_{ji}"/>, and is found by:</p>
+<div class="math">
+<p><img src="_images/math/a25fbe2b1d2c99f6e93bb0c16b422a16d706f479.png" alt="\frac{1}{\rho} \left[ \nabla \cdot (\phi \boldsymbol{\tau}) \right]_x
+= \frac{1}{\rho}
+\left[
+    \left[
+        \frac{\partial}{\partial x},
+        \frac{\partial}{\partial y},
+        \frac{\partial}{\partial z}
+    \right]
+    \phi
+    \left[
+        \begin{matrix}
+            \tau_{xx} &amp; \tau_{xy} &amp; \tau_{xz}\\
+            \tau_{yx} &amp; \tau_{yy} &amp; \tau_{yz}\\
+            \tau_{zx} &amp; \tau_{zy} &amp; \tau_{zz}\\
+        \end{matrix}
+    \right]
+\right]_x
+
+= \frac{1}{\rho}
+\left[
+    \begin{array}{c}
+        \frac{\partial (\phi \tau_{xx})}{\partial x}
+        + \frac{\partial (\phi \tau_{xy})}{\partial y}
+        + \frac{\partial (\phi \tau_{xz})}{\partial z}\\
+        \frac{\partial (\phi \tau_{yx})}{\partial x}
+        + \frac{\partial (\phi \tau_{yy})}{\partial y}
+        + \frac{\partial (\phi \tau_{yz})}{\partial z}\\
+        \frac{\partial (\phi \tau_{zx})}{\partial x}
+        + \frac{\partial (\phi \tau_{zy})}{\partial y}
+        + \frac{\partial (\phi \tau_{zz})}{\partial z}\\
+    \end{array}
+\right]_x
+= \frac{1}{\rho}
+\left(
+    \frac{\partial (\phi \tau_{xx})}{\partial x}
+    + \frac{\partial (\phi \tau_{xy})}{\partial y}
+    + \frac{\partial (\phi \tau_{xz})}{\partial z}
+\right)"/></p>
+</div><p>In a linear viscous fluid, the stress and strain rate
+(<img class="math" src="_images/math/be6144b74fc7e34c2a42af2bf1993b8ea1556f63.png" alt="\dot{\boldsymbol{\epsilon}}"/>) is linearly dependent, scaled by the
+viscosity parameter <img class="math" src="_images/math/cebafd792667b403a21a4f507d003102d369ebfe.png" alt="\mu_f"/>:</p>
+<div class="math">
+<p><img src="_images/math/2e91d0a31e3dfb269c8af110ef9d87cca141c921.png" alt="\tau_{ij} = 2 \mu_f \dot{\epsilon}_{ij}
+= \mu_f \left(
+\frac{\partial v_i}{\partial x_j} + \frac{\partial v_j}{\partial x_i}
+\right)"/></p>
+</div><p>With this relationship, the deviatoric stress tensor components can be
+calculated as:</p>
+<div class="math">
+<p><img src="_images/math/51aabda11b1f09c36be43c63f1a3363920f6d2ba.png" alt="\tau_{xx} = 2 \mu_f \frac{\partial v_x}{\partial x} \qquad
+\tau_{yy} = 2 \mu_f \frac{\partial v_y}{\partial y} \qquad
+\tau_{zz} = 2 \mu_f \frac{\partial v_z}{\partial z}
+
+\tau_{xy} = \mu_f \left(
+\frac{\partial v_x}{\partial y} + \frac{\partial v_y}{\partial x} \right)
+
+\tau_{xz} = \mu_f \left(
+\frac{\partial v_x}{\partial z} + \frac{\partial v_z}{\partial x} \right)
+
+\tau_{yz} = \mu_f \left(
+\frac{\partial v_y}{\partial z} + \frac{\partial v_z}{\partial y} \right)"/></p>
+</div><p>where <img class="math" src="_images/math/cebafd792667b403a21a4f507d003102d369ebfe.png" alt="\mu_f"/> is the dynamic viscosity. The above formulation of the
+fluid rheology assumes identical bulk and shear viscosities. The derivation of
+the equations for the other spatial components is trivial.</p>
+</div>
+<div class="section" id="porosity-estimation">
+<h2>Porosity estimation<a class="headerlink" href="#porosity-estimation" title="Permalink to this headline">¶</a></h2>
+<p>The solid volume in each fluid cell is determined by the ratio of the
+a cell-centered spherical cell volume (<img class="math" src="_images/math/265d2a4158e84e0fc8246b1ce6a4e53f1a6891b3.png" alt="V_c"/>) and the sum of intersecting
+particle volumes (<img class="math" src="_images/math/2990374fde94f327b7f4f669dc47cb1224709586.png" alt="V_s"/>). The spherical cell volume has a center at
+<img class="math" src="_images/math/c3233a1342e903c75d1e7983d6d3b12acc11d806.png" alt="\boldsymbol{x}_i"/>, and a radius of <img class="math" src="_images/math/8d47777d070e3b1ae6a9ea0d4918309bc8c942fe.png" alt="R_i"/>, which is equal to half
+the fluid cell width. The nearby particles are characterized by position
+<img class="math" src="_images/math/a528060f65c96db30e29fe0792ecee736ec290c3.png" alt="\boldsymbol{x}_j"/> and radius <img class="math" src="_images/math/4a54c15fca98536e1ec23aabecf9d69de1e92aa3.png" alt="r_j"/>. The center distance is defined
+as:</p>
+<div class="math">
+<p><img src="_images/math/1b6eba43d66e5a04885cc0147dc7f757b297c95a.png" alt="d_{ij} = ||\boldsymbol{x}_i - \boldsymbol{x}_j||"/></p>
+</div><p>The common volume of the two intersecting spheres is zero if the volumes aren’t
+intersecting, lens shaped if they are intersecting, and spherical if the
+particle is fully contained by the spherical cell volume:</p>
+<div class="math">
+<p><img src="_images/math/37759601d93bbc73c7ce9a2a516909c8bf49a7d8.png" alt="V^s_{i} = \sum_j
+\begin{cases}
+    0 &amp; \textit{if } R_i + r_j \leq d_{ij} \\
+    \frac{1}{12d_{ij}} \left[ \pi (R_i + r_j - d_{ij})^2
+    (d_{ij}^2 + 2d_{ij}r_j - 3r_j^2 + 2d_{ij} R_i + 6r_j R_i - 3R_i^2)
+    \right] &amp; \textit{if } R_i - r_j &lt; d_{ij} &lt; R_i + r_j \\
+    \frac{4}{3} \pi r^3_j &amp; \textit{if } d_{ij} \leq R_i - r_j
+\end{cases}"/></p>
+</div><p>Using this method, the cell porosity values are continuous through time as
+particles enter and exit the cell volume. The rate of porosity change
+(<img class="math" src="_images/math/7e2e127f90d156e3e20b4f4c36f3dd5a660fbc5e.png" alt="d\phi/dt"/>) is estimated by the backwards Euler method
+by considering the previous and current porosity.</p>
+</div>
+<div class="section" id="particle-fluid-interaction">
+<h2>Particle-fluid interaction<a class="headerlink" href="#particle-fluid-interaction" title="Permalink to this headline">¶</a></h2>
+<p>The momentum exchange of the granular and fluid phases follows the procedure
+outlined by Gidaspow 1992 and Shamy and Zhegal 2005. The fluid and particle
+interaction is based on the concept of drag, where the magnitude is based on
+semi-empirical relationships. The drag force scales linearly with the relative
+difference in velocity between the fluid and particle phase. On the base of
+Newton’s third law, the resulting drag force is applied with opposite signs to
+the particle and fluid.</p>
+<p>For fluid cells with porosities (<img class="math" src="_images/math/fffd2357ee88a9c50ba9e831ed64c39c73d54a07.png" alt="\phi"/>) less or equal to 0.8, the drag
+force is based on the Ergun (1952) equation:</p>
+<div class="math">
+<p><img src="_images/math/e8048524abc8cd9b1c09c0ae40329ed61f57c719.png" alt="\bar{\boldsymbol{f}}_d = \left(
+150 \frac{\mu_f (1-\phi)^2}{\phi\bar{d}^2}
++ 1.75 \frac{(1-\phi)\rho_f
+  ||\boldsymbol{v}_f - \bar{\boldsymbol{v}}_p||}{\bar{d}}
+\right)
+(\boldsymbol{v}_f - \bar{\boldsymbol{v}}_p)"/></p>
+</div><p>here, <img class="math" src="_images/math/935dede8fc5c0f449ff3f1d91a038d4c2000030e.png" alt="\bar{d}"/> denotes the average particle diameter in the cell,
+<img class="math" src="_images/math/94847c4d283861cea52ea3928c632de4c4062427.png" alt="\boldsymbol{v}_f"/> is the fluid flow velocity, and
+<img class="math" src="_images/math/91106df679664eb0437c2180a142140457aff53d.png" alt="\bar{\boldsymbol{v}}_p"/> is the average particle velocity in the cell. All
+particles in contact with the previously mentioned cell-centered sphere for
+porosity estimation contribute to the average particle velocity and diameter in
+the fluid cell.</p>
+<p>If the porosity is greater than 0.8, the cell-averaged drag force
+(<img class="math" src="_images/math/2f3dd2fc907238254bb45cc2427997659c2a1336.png" alt="\bar{\boldsymbol{f}}_d"/> is found from the Wen and Yu (1966) equation,
+which considers the fluid flow situation:</p>
+<div class="math">
+<p><img src="_images/math/76c074e79b0a4187ccedcd40bf4147aa3551e819.png" alt="\bar{\boldsymbol{f}}_d = \left(
+\frac{3}{4}
+\frac{C_d (1-\phi) \phi^{-2.65} \mu_f \rho_f
+||\boldsymbol{v}_f - \bar{\boldsymbol{v}}_p||}{\bar{d}}
+\right)
+(\boldsymbol{v}_f - \bar{\boldsymbol{v}}_p)"/></p>
+</div><p>The drag coefficient <img class="math" src="_images/math/0b33acc067eabb49e01dc6f7a834abfd10c67f03.png" alt="C_d"/> is evaluated depending on the magnitude of the
+Reynolds number <img class="math" src="_images/math/68132fbd6f413bd35c80cc0f70f464cb95921a0c.png" alt="Re"/>:</p>
+<div class="math">
+<p><img src="_images/math/753a91bd77f2126e848dd6d0d8a4ba663dcb2dc4.png" alt="C_d =
+\begin{cases}
+\frac{24}{Re} (1+0.15 (Re)^{0.687} &amp; \textit{if } Re &lt; 1,000 \\
+0.44 &amp; \textit{if } Re \geq 1,000
+\end{cases}"/></p>
+</div><p>where the Reynold’s number is found by:</p>
+<div class="math">
+<p><img src="_images/math/9219f7822d26600e1170a020e204c434c313d2ea.png" alt="Re = \frac{\phi\rho_f\bar{d}}{\mu_f}
+||\boldsymbol{v}_f - \bar{\boldsymbol{v}}_p||"/></p>
+</div><p>The interaction force is applied to the fluid with negative sign as a
+contribution to the body force <img class="math" src="_images/math/589f894e7bddf7ae1a4b9dcb40762fc87b0f01f3.png" alt="\boldsymbol{f}"/>. The fluid interaction
+force applied particles in the fluid cell is:</p>
+<div class="math">
+<p><img src="_images/math/b3a2c5ab22c7b99459b17e5880b0a77558e77144.png" alt="\boldsymbol{f}_i = \frac{\bar{\boldsymbol{f}}_d V_p}{1-\phi}"/></p>
+</div><p>where <img class="math" src="_images/math/70bdb5c509a569e9fc814299f3f8d27e4c1f57b9.png" alt="V_p"/> denotes the particle volume. Optionally, the above
+interaction force could be expanded to include the force induced by the fluid
+pressure gradient:</p>
+<div class="math">
+<p><img src="_images/math/36f8efcaa2b30e4c33847b988de9ebefad7c0f8a.png" alt="\boldsymbol{f}_i = \left(
+-\nabla p +
+\frac{\bar{\boldsymbol{f}}_d}{1-\phi}
+\right) V_p"/></p>
+</div></div>
+<div class="section" id="fluid-dynamics-solution-procedure-by-operator-splitting">
+<h2>Fluid dynamics solution procedure by operator splitting<a class="headerlink" href="#fluid-dynamics-solution-procedure-by-operator-splitting" title="Permalink to this headline">¶</a></h2>
+<p>The partial differential terms in the previously described equations are found
+using finite central differences. Modifying the operator splitting methodology
+presented by Langtangen et al.  (2002), the predicted velocity
+<img class="math" src="_images/math/1cc93350d8f6add165eff5f513eaa626e1c8c16c.png" alt="\boldsymbol{v}^*"/> after a finite time step
+<img class="math" src="_images/math/b4ed9c2e208e08edeca8b1550ec0840acd090276.png" alt="\Delta t"/> is found by explicit integration of the momentum equation.</p>
+<div class="math">
+<p><img src="_images/math/ae12ade90e1697e54f0a857eaaa83de8c1b11dea.png" alt="\frac{\Delta (\phi v_x)}{\Delta t}
++ \nabla \cdot (\phi v_x \boldsymbol{v})
+= - \frac{1}{\rho} \frac{\Delta p}{\Delta x}
++ \frac{1}{\rho} \left[ \nabla \cdot (\phi \boldsymbol{\tau}) \right]_x
+- \frac{1}{\rho} f^i_x
++ \phi g_x
+
+\Downarrow
+
+\phi \frac{\Delta v_x}{\Delta t}
++ v_x \frac{\Delta \phi}{\Delta t}
++ \nabla \cdot (\phi v_x \boldsymbol{v})
+= - \frac{1}{\rho} \frac{\Delta p}{\Delta x}
++ \frac{1}{\rho} \left[ \nabla \cdot (\phi \boldsymbol{\tau}) \right]_x
+- \frac{1}{\rho} f^i_x
++ \phi g_x"/></p>
+</div><p>We want to isolate <img class="math" src="_images/math/0d439c4a5603a28bc8b077cee61479c42337b5f4.png" alt="\Delta v_x"/> in the above equation in order to project
+the new velocity.</p>
+<div class="math">
+<p><img src="_images/math/088383ea56b643f441d56879639a41ababbd360b.png" alt="\phi \frac{\Delta v_x}{\Delta t}
+= - \frac{1}{\rho} \frac{\Delta p}{\Delta x}
++ \frac{1}{\rho} \left[ \nabla \cdot (\phi \boldsymbol{\tau}) \right]_x
+- \frac{1}{\rho} f^i_x
++ \phi g_x
+- v_x \frac{\Delta \phi}{\Delta t}
+- \nabla \cdot (\phi v_x \boldsymbol{v})
+
+\Delta v_x
+= - \frac{1}{\rho} \frac{\Delta p}{\Delta x} \frac{\Delta t}{\phi}
++ \frac{1}{\rho} \left[ \nabla \cdot (\phi \boldsymbol{\tau}) \right]_x
+  \frac{\Delta t}{\phi}
+- \frac{\Delta t}{\rho\phi} f^i_x
++ \Delta t g_x
+- v_x \frac{\Delta \phi}{\phi}
+- \nabla \cdot (\phi v_x \boldsymbol{v}) \frac{\Delta t}{\phi}"/></p>
+</div><p>The term <img class="math" src="_images/math/7138dad9ac96835665b17f5817eacfcaa9b834c9.png" alt="\beta"/> is introduced as an adjustable, dimensionless parameter
+in the range <img class="math" src="_images/math/fa500507a3f7011763a17911535a4e66fc06b7c7.png" alt="[0;1]"/>, and determines the importance of the old pressure
+values in the solution procedure (Langtangen et al. 2002).  A value of 0
+corresponds to <a class="reference external" href="https://en.wikipedia.org/wiki/Projection_method_(fluid_dynamics)#Chorin.27s_projection_method">Chorin’s projection method</a> originally described
+in <a class="reference external" href="http://www.ams.org/journals/mcom/1968-22-104/S0025-5718-1968-0242392-2/S0025-5718-1968-0242392-2.pdf">Chorin (1968)</a>.</p>
+<div class="math">
+<p><img src="_images/math/cbb779e005d215d86d8205eaf0134147d1a5650d.png" alt="v_x^* = v_x^t + \Delta v_x
+
+v_x^* = v_x^t
+- \frac{\beta}{\rho} \frac{\Delta p^t}{\Delta x} \frac{\Delta t}{\phi^t}
++ \frac{1}{\rho} \left[ \nabla \cdot (\phi^t \boldsymbol{\tau}^t) \right]_x
+  \frac{\Delta t}{\phi}
+- \frac{\Delta t}{\rho\phi} f^i_x
++ \Delta t g_x
+- v^t_x \frac{\Delta \phi}{\phi^t}
+- \nabla \cdot (\phi^t v_x^t \boldsymbol{v}^t) \frac{\Delta t}{\phi^t}"/></p>
+</div><p>Here, <img class="math" src="_images/math/7c3282642d867109f551c02c4946b913e5c0a430.png" alt="\Delta x"/> denotes the cell spacing. The velocity found
+(<img class="math" src="_images/math/f5e23af6a7c6ad3147e01a647b26ac8d4ce72811.png" alt="v_x^*"/>) is only a prediction of the fluid velocity at time
+<img class="math" src="_images/math/b3939293c919512ab5328d9dfacb76aa0a46a7bd.png" alt="t+\Delta t"/>, since the estimate isn’t constrained by the continuity
+equation:</p>
+<div class="math">
+<p><img src="_images/math/d8278c7c03b0669fb61f2460a5a6e24ceff4f94a.png" alt="\frac{\Delta \phi^t}{\Delta t} + \nabla \cdot (\phi^t
+\boldsymbol{v}^{t+\Delta t}) = 0"/></p>
+</div><p>The divergence of a scalar and vector can be <a class="reference external" href="http://www.wolframalpha.com/input/?i=div(p+v)">split</a>:</p>
+<div class="math">
+<p><img src="_images/math/5151250a36caedcbd152476e5afd1e192b708d3f.png" alt="\phi^t \nabla \cdot \boldsymbol{v}^{t+\Delta t} +
+\boldsymbol{v}^{t+\Delta t} \cdot \nabla \phi^t
++ \frac{\Delta \phi^t}{\Delta t} = 0"/></p>
+</div><p>The predicted velocity is corrected using the new pressure (Langtangen et al.
+2002):</p>
+<div class="math">
+<p><img src="_images/math/38d819f488f689e73fab8521008fad71f406dc78.png" alt="\boldsymbol{v}^{t+\Delta t} = \boldsymbol{v}^*
+%- \frac{\Delta t}{\rho} \nabla \epsilon
+- \frac{\Delta t}{\rho \phi^t} \nabla \epsilon
+\quad \text{where} \quad
+\epsilon = p^{t+\Delta t} - \beta p^t"/></p>
+</div><p>The above formulation of the future velocity is put into the continuity
+equation:</p>
+<div class="math">
+<p><img src="_images/math/48e1ca5e30bd21cd906af9ed5130d80d272dd215.png" alt="\Rightarrow
+\phi^t \nabla \cdot
+\left( \boldsymbol{v}^* - \frac{\Delta t}{\rho \phi^t} \nabla \epsilon \right)
++
+\left( \boldsymbol{v}^* - \frac{\Delta t}{\rho \phi^t} \nabla \epsilon \right)
+\cdot \nabla \phi^t + \frac{\Delta \phi^t}{\Delta t} = 0"/></p>
+</div><div class="math">
+<p><img src="_images/math/472f5505e817f5744478c6086f93e90e478f6111.png" alt="\Rightarrow
+\phi^t \nabla \cdot
+\boldsymbol{v}^* - \frac{\Delta t}{\rho \phi^t} \phi^t \nabla^2 \epsilon
++ \nabla \phi^t \cdot \boldsymbol{v}^*
+- \nabla \phi^t \cdot \nabla \epsilon \frac{\Delta t}{\rho \phi^t}
++ \frac{\Delta \phi^t}{\Delta t} = 0"/></p>
+</div><div class="math">
+<p><img src="_images/math/f1a012eea74b7fa4510651ff6c338287fb01e182.png" alt="\Rightarrow
+\frac{\Delta t}{\rho} \nabla^2 \epsilon
+= \phi^t \nabla \cdot \boldsymbol{v}^*
++ \nabla \phi^t \cdot \boldsymbol{v}^*
+- \nabla \phi^t \cdot \nabla \epsilon \frac{\Delta t}{\rho \phi^t}
++ \frac{\Delta \phi^t}{\Delta t}"/></p>
+</div><p>The pressure difference in time becomes a <a class="reference external" href="https://en.wikipedia.org/wiki/Poisson's_equation">Poisson equation</a> with added terms:</p>
+<div class="math">
+<p><img src="_images/math/81ace2a5e8f4b657995ec7b8059f33de5a5efff3.png" alt="\Rightarrow
+\nabla^2 \epsilon
+= \frac{\nabla \cdot \boldsymbol{v}^* \phi^t \rho}{\Delta t}
++ \frac{\nabla \phi^t \cdot \boldsymbol{v}^* \rho}{\Delta t}
+- \frac{\nabla \phi^t \cdot \nabla \epsilon}{\phi^t}
++ \frac{\Delta \phi^t \rho}{\Delta t^2}"/></p>
+</div><p>The right hand side of the above equation is termed the <em>forcing function</em>
+<img class="math" src="_images/math/5b7752c757e0b691a80ab8227eadb8a8389dc58a.png" alt="f"/>, which is decomposed into two terms, <img class="math" src="_images/math/0464a071da3203b9d565701f510a766ae52f3016.png" alt="f_1"/> and <img class="math" src="_images/math/8bba708bfd9e1df2575d817c79ab6ae0139b20c6.png" alt="f_2"/>:</p>
+<div class="math">
+<p><img src="_images/math/d28d849758880f28a8cc59ef17f116c79b66bc13.png" alt="f_1
+= \frac{\nabla \cdot \boldsymbol{v}^* \phi^t \rho}{\Delta t}
++ \frac{\nabla \phi^t \cdot \boldsymbol{v}^* \rho}{\Delta t}
++ \frac{\Delta \phi^t \rho}{\Delta t^2}
+
+f_2 =
+\frac{\nabla \phi^t \cdot \nabla \epsilon}{\phi^t}"/></p>
+</div><p>During the <a class="reference external" href="http://www.rsmas.miami.edu/personal/miskandarani/Courses/MSC321/Projects/prjpoisson.pdf">Jacobi iterative solution procedure</a> <img class="math" src="_images/math/0464a071da3203b9d565701f510a766ae52f3016.png" alt="f_1"/> remains constant,
+while <img class="math" src="_images/math/8bba708bfd9e1df2575d817c79ab6ae0139b20c6.png" alt="f_2"/> changes value. For this reason, <img class="math" src="_images/math/0464a071da3203b9d565701f510a766ae52f3016.png" alt="f_1"/> is found only
+during the first iteration, while <img class="math" src="_images/math/8bba708bfd9e1df2575d817c79ab6ae0139b20c6.png" alt="f_2"/> is updated every time. The value
+of the forcing function is found as:</p>
+<div class="math">
+<p><img src="_images/math/035491a28db4f5849a4e9487e6a4231a2922e308.png" alt="f = f_1 - f_2"/></p>
+</div><p>Using second-order finite difference approximations of the Laplace operator
+second-order partial derivatives, the differential equations become a system of
+equations that is solved using <a class="reference external" href="https://en.wikipedia.org/wiki/Relaxation_(iterative_method)">iteratively</a> using Jacobi updates. The total
+number of unknowns is <img class="math" src="_images/math/6f7750f469603b161d82a2f6dc04817714fa1805.png" alt="(n_x - 1)(n_y - 1)(n_z - 1)"/>.</p>
+<p>The discrete Laplacian (approximation of the Laplace operator) can be obtained
+by a finite-difference seven-point stencil in a three-dimensional, cubic
+grid with cell spacing <img class="math" src="_images/math/8036f77347902c41196821bdf54abad2180ee217.png" alt="\Delta x, \Delta y, \Delta z"/>, considering the six
+face neighbors:</p>
+<div class="math">
+<p><img src="_images/math/ed974cb6e5fa97a3471d7769a1403cac3c2aa6ba.png" alt="\nabla^2 \epsilon_{i_x,i_y,i_z}  \approx
+\frac{\epsilon_{i_x-1,i_y,i_z} - 2 \epsilon_{i_x,i_y,i_z}
++ \epsilon_{i_x+1,i_y,i_z}}{\Delta x^2}
++ \frac{\epsilon_{i_x,i_y-1,i_z} - 2 \epsilon_{i_x,i_y,i_z}
++ \epsilon_{i_x,i_y+1,i_z}}{\Delta y^2}
+
++ \frac{\epsilon_{i_x,i_y,i_z-1} - 2 \epsilon_{i_x,i_y,i_z}
++ \epsilon_{i_x,i_y,i_z+1}}{\Delta z^2}
+\approx f_{i_x,i_y,i_z}"/></p>
+</div><p>Within a Jacobi iteration, the value of the unknowns (<img class="math" src="_images/math/6b2a5284ab108ffbc0f8c4ca77742171e86a285d.png" alt="\epsilon^n"/>) is
+used to find an updated solution estimate (<img class="math" src="_images/math/5f25ea5b87a38722f651c7e8edeffd568fc2c9c0.png" alt="\epsilon^{n+1}"/>).
+The solution for the updated value takes the form:</p>
+<div class="math">
+<p><img src="_images/math/1768cb6067e2811bb6240abd9a2ed5d0a75fba05.png" alt="\epsilon^{n+1}_{i_x,i_y,i_z}
+= \frac{-\Delta x^2 \Delta y^2 \Delta z^2 f_{i_x,i_y,i_z}
++ \Delta y^2 \Delta z^2 (\epsilon^n_{i_x-1,i_y,i_z} +
+  \epsilon^n_{i_x+1,i_y,i_z})
++ \Delta x^2 \Delta z^2 (\epsilon^n_{i_x,i_y-1,i_z} +
+  \epsilon^n_{i_x,i_y+1,i_z})
++ \Delta x^2 \Delta y^2 (\epsilon^n_{i_x,i_y,i_z-1} +
+  \epsilon^n_{i_x,i_y,i_z+1})}
+  {2 (\Delta x^2 \Delta y^2
+  + \Delta x^2 \Delta z^2
+  + \Delta y^2 \Delta z^2) }"/></p>
+</div><p>The difference between the current and updated value is termed the <em>normalized
+residual</em>:</p>
+<div class="math">
+<p><img src="_images/math/91499159f82810f02d6b4e1403f836c510b79421.png" alt="r_{i_x,i_y,i_z} = \frac{(\epsilon^{n+1}_{i_x,i_y,i_z}
+- \epsilon^n_{i_x,i_y,i_z})^2}{(\epsilon^{n+1}_{i_x,i_y,i_z})^2}"/></p>
+</div><p>Note that the <img class="math" src="_images/math/0ad7b30534898f253002222f998f38001e604648.png" alt="\epsilon"/> values cannot be 0 due to the above normalization
+of the residual.</p>
+<p>The updated values are at the end of the iteration stored as the current values,
+and the maximal value of the normalized residual is found. If this value is
+larger than a tolerance criteria, the procedure is repeated. The iterative
+procedure is ended if the number of iterations exceeds a defined limit.</p>
+<p>After the values of <img class="math" src="_images/math/0ad7b30534898f253002222f998f38001e604648.png" alt="\epsilon"/> are found, they are used to find the new
+pressures and velocities:</p>
+<div class="math">
+<p><img src="_images/math/1b4e9fe95951a29e190acb2405cba9b530aca182.png" alt="\bar{p}^{t+\Delta t} = \beta \bar{p}^t + \epsilon"/></p>
+</div><div class="math">
+<p><img src="_images/math/225ec667f659f2a77a57ca0ad93706b28b847601.png" alt="\bar{\boldsymbol{v}}^{t+\Delta t} =
+\bar{\boldsymbol{v}}^* - \frac{\Delta t}{\rho\phi} \nabla \epsilon"/></p>
+</div></div>
+<div class="section" id="boundary-conditions">
+<h2>Boundary conditions<a class="headerlink" href="#boundary-conditions" title="Permalink to this headline">¶</a></h2>
+<p>The lateral boundaries are periodic. This cannot be changed in the current
+version of <code class="docutils literal notranslate"><span class="pre">sphere</span></code>. This means that the fluid properties at the paired,
+parallel lateral (<img class="math" src="_images/math/888f7c323ac0341871e867220ae2d76467d74d6e.png" alt="x"/> and <img class="math" src="_images/math/1b5e577d6216dca3af7d87aa122a0b9b360d6cb3.png" alt="y"/>) boundaries are identical. A flow
+leaving through one side reappears on the opposite side.</p>
+<p>The top and bottom boundary conditions of the fluid grid can be either:
+prescribed pressure (Dirichlet), or prescribed velocity (Neumann). The
+(horizontal) velocities parallel to the boundaries are free to attain other
+values (free slip). The Dirichlet boundary condition is enforced by keeping the
+value of <img class="math" src="_images/math/0ad7b30534898f253002222f998f38001e604648.png" alt="\epsilon"/> constant at the boundaries, e.g.:</p>
+<div class="math">
+<p><img src="_images/math/7d5308c191e1fc1e95701accdd5e5ef125461f33.png" alt="\epsilon^{n+1}_{i_x,i_y,i_z = 1 \vee n_z}
+=
+\epsilon^{n}_{i_x,i_y,i_z = 1 \vee n_z}"/></p>
+</div><p>The Neumann boundary condition of no flow across the boundary is enforced by
+setting the gradient of <img class="math" src="_images/math/0ad7b30534898f253002222f998f38001e604648.png" alt="\epsilon"/> perpendicular to the boundary to zero,
+e.g.:</p>
+<div class="math">
+<p><img src="_images/math/79f896fdeda423ba71fb697a6a2d83f16ed50b5b.png" alt="\nabla_z \epsilon^{n+1}_{i_x,i_y,i_z = 1 \vee n_z} = 0"/></p>
+</div></div>
+<div class="section" id="numerical-implementation">
+<h2>Numerical implementation<a class="headerlink" href="#numerical-implementation" title="Permalink to this headline">¶</a></h2>
+<p>Ghost nodes</p>
+<p>—</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Fluid simulation and particle-fluid interaction</a><ul>
+<li><a class="reference internal" href="#derivation-of-the-navier-stokes-equations-with-porosity">Derivation of the Navier Stokes equations with porosity</a></li>
+<li><a class="reference internal" href="#porosity-estimation">Porosity estimation</a></li>
+<li><a class="reference internal" href="#particle-fluid-interaction">Particle-fluid interaction</a></li>
+<li><a class="reference internal" href="#fluid-dynamics-solution-procedure-by-operator-splitting">Fluid dynamics solution procedure by operator splitting</a></li>
+<li><a class="reference internal" href="#boundary-conditions">Boundary conditions</a></li>
+<li><a class="reference internal" href="#numerical-implementation">Numerical implementation</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="dem.html"
+                        title="previous chapter">Discrete element method</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="python_api.html"
+                        title="next chapter">Python API</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/cfd.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="python_api.html" title="Python API"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="dem.html" title="Discrete element method"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">sphere 2.15-beta documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2014, Anders Damsgaard.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 2.2.0.
+    </div>
+  </body>
+</html>

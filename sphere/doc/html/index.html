@@ -1,0 +1,161 @@
+
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8" />
+    <title>The sphere documentation &#8212; sphere 2.15-beta documentation</title>
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Introduction and Installation" href="introduction.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="introduction.html" title="Introduction and Installation"
+             accesskey="N">next</a> |</li>
+        <li class="nav-item nav-item-0"><a href="#">sphere 2.15-beta documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="the-sphere-documentation">
+<h1>The sphere documentation<a class="headerlink" href="#the-sphere-documentation" title="Permalink to this headline">¶</a></h1>
+<p>This is the official documentation for the <code class="docutils literal notranslate"><span class="pre">sphere</span></code> discrete element modelling
+software. This document aims at guiding the installation process, documenting
+the usage, and explaining the relevant theory.</p>
+<p><code class="docutils literal notranslate"><span class="pre">sphere</span></code> is developed by Anders Damsgaard as part as his Ph.D. project, under
+supervision of David Lundbek Egholm and Jan A. Piotrowski, all of the Department
+of Geoscience, Aarhus University, Denmark. The author welcomes interested third
+party developers. This document is a work in progress.</p>
+<p>Contact: Anders Damsgaard, <a class="reference external" href="https://adamsgaard.dk">https://adamsgaard.dk</a>,
+<a class="reference external" href="mailto:anders&#46;damsgaard&#37;&#52;&#48;geo&#46;au&#46;dk">mailto:anders<span>&#46;</span>damsgaard<span>&#64;</span>geo<span>&#46;</span>au<span>&#46;</span>dk</a></p>
+<div class="section" id="contents">
+<h2>Contents<a class="headerlink" href="#contents" title="Permalink to this headline">¶</a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Introduction and Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="introduction.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="introduction.html#obtaining-sphere">Obtaining sphere</a></li>
+<li class="toctree-l2"><a class="reference internal" href="introduction.html#building-sphere">Building <code class="docutils literal notranslate"><span class="pre">sphere</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="introduction.html#updating-sphere">Updating sphere</a></li>
+<li class="toctree-l2"><a class="reference internal" href="introduction.html#work-flow">Work flow</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="dem.html">Discrete element method</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="dem.html#contact-search">Contact search</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dem.html#contact-interaction">Contact interaction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dem.html#temporal-integration">Temporal integration</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cfd.html">Fluid simulation and particle-fluid interaction</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cfd.html#derivation-of-the-navier-stokes-equations-with-porosity">Derivation of the Navier Stokes equations with porosity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cfd.html#porosity-estimation">Porosity estimation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cfd.html#particle-fluid-interaction">Particle-fluid interaction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cfd.html#fluid-dynamics-solution-procedure-by-operator-splitting">Fluid dynamics solution procedure by operator splitting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cfd.html#boundary-conditions">Boundary conditions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cfd.html#numerical-implementation">Numerical implementation</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="python_api.html">Python API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="python_api.html#sample-usage">Sample usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="python_api.html#module-sphere">The <code class="docutils literal notranslate"><span class="pre">sphere</span></code> module</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="sphere_internals.html">sphere internals</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="sphere_internals.html#numerical-algorithm">Numerical algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sphere_internals.html#c-reference">C++ reference</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="indices-and-tables">
+<h2>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
+<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
+</ul>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="#">Table of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">The sphere documentation</a><ul>
+<li><a class="reference internal" href="#contents">Contents</a></li>
+<li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Next topic</h4>
+  <p class="topless"><a href="introduction.html"
+                        title="next chapter">Introduction and Installation</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/index.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="introduction.html" title="Introduction and Installation"
+             >next</a> |</li>
+        <li class="nav-item nav-item-0"><a href="#">sphere 2.15-beta documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2014, Anders Damsgaard.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 2.2.0.
+    </div>
+  </body>
+</html>

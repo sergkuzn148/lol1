@@ -1,0 +1,324 @@
+
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8" />
+    <title>Introduction and Installation &#8212; sphere 2.15-beta documentation</title>
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Discrete element method" href="dem.html" />
+    <link rel="prev" title="The sphere documentation" href="index.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="dem.html" title="Discrete element method"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="The sphere documentation"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">sphere 2.15-beta documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="introduction-and-installation">
+<h1>Introduction and Installation<a class="headerlink" href="#introduction-and-installation" title="Permalink to this headline">¶</a></h1>
+<p>The <code class="docutils literal notranslate"><span class="pre">sphere</span></code>-software is used for three-dimensional discrete element method
+(DEM) particle simulations. The source code is written in C++, CUDA C and
+Python, and is compiled by the user. The main computations are performed on the
+graphics processing unit (GPU) using NVIDIA’s general purpose parallel computing
+architecture, CUDA. Simulation setup and data analysis is performed with the
+included Python API.</p>
+<p>The ultimate aim of the <code class="docutils literal notranslate"><span class="pre">sphere</span></code> software is to simulate soft-bedded subglacial
+conditions, while retaining the flexibility to perform simulations of granular
+material in other environments.</p>
+<p>The purpose of this documentation is to provide the user with a walk-through of
+the installation, work-flow, data-analysis and visualization methods of
+<code class="docutils literal notranslate"><span class="pre">sphere</span></code>. In addition, the <code class="docutils literal notranslate"><span class="pre">sphere</span></code> internals are exposed to provide a way of
+understanding of the discrete element method numerical routines taking place.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Command examples in this document starting with the symbol <code class="docutils literal notranslate"><span class="pre">$</span></code> are
+meant to be executed in the shell of the operational system, and <code class="docutils literal notranslate"><span class="pre">&gt;&gt;&gt;</span></code>
+means execution in Python. <a class="reference external" href="http://ipython.org">IPython</a> is an excellent,
+interactive Python shell.</p>
+</div>
+<p>All numerical values in this document, the source code, and the configuration
+files are typeset with strict respect to the SI unit system.</p>
+<div class="section" id="requirements">
+<h2>Requirements<a class="headerlink" href="#requirements" title="Permalink to this headline">¶</a></h2>
+<p>The build requirements are:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>A Nvidia CUDA-supported version of Linux or Mac OS X (see the <a class="reference external" href="http://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html">CUDA toolkit
+release notes</a> for more information)</p></li>
+<li><p><a class="reference external" href="https://www.gnu.org/software/make/">GNU Make</a></p></li>
+<li><p><a class="reference external" href="http://www.cmake.org">CMake</a>, version 2.8 or newer</p></li>
+<li><p>The <a class="reference external" href="http://gcc.gnu.org/">GNU Compiler Collection</a> (GCC)</p></li>
+<li><p>The <a class="reference external" href="https://developer.nvidia.com/cuda-downloads">Nvidia CUDA toolkit</a>,
+version 8.0 or newer</p></li>
+</ul>
+</div></blockquote>
+<p>In Debian GNU/Linux, these dependencies can be installed by running:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ sudo apt-get install build-essential cmake nvidia-cuda-toolkit clang-3.8
+</pre></div>
+</div>
+<p>Unfortunately, the Nvidia Toolkit is shipped under a non-free license. In order
+to install it in Debian GNU/Linux, add <code class="docutils literal notranslate"><span class="pre">non-free</span></code> archives to your
+<code class="docutils literal notranslate"><span class="pre">/etc/apt/sources.list</span></code>.</p>
+<p>The runtime requirements are:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>A <a class="reference external" href="http://www.nvidia.com/object/cuda_gpus.html">CUDA-enabled GPU</a> with
+compute capability 2.0 or greater.</p></li>
+<li><p>A Nvidia CUDA-enabled GPU and device driver</p></li>
+</ul>
+</div></blockquote>
+<p>Optional tools, required for simulation setup and data processing:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><a class="reference external" href="http://www.python.org/">Python</a></p></li>
+<li><p><a class="reference external" href="http://numpy.scipy.org">Numpy</a></p></li>
+<li><p><a class="reference external" href="http://matplotlib.org">Matplotlib</a></p></li>
+<li><p><a class="reference external" href="http://www.vtk.org">Python bindings for VTK</a></p></li>
+<li><p><a class="reference external" href="http://www.imagemagick.org/script/index.php">Imagemagick</a></p></li>
+<li><p><a class="reference external" href="http://ffmpeg.org/">ffmpeg</a>. Soon to be replaced by avconv!</p></li>
+</ul>
+</div></blockquote>
+<p>In Debian GNU/Linux, these dependencies can be installed by running:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ sudo apt-get install python python-numpy python-matplotlib python-vtk \
+    imagemagick libav-tools
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">sphere</span></code> is distributed with a HTML and PDF build of the documentation. The
+following tools are required for building the documentation:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><a class="reference external" href="http://sphinx-doc.org">Sphinx</a></p>
+<ul>
+<li><p><a class="reference external" href="http://packages.python.org/sphinxcontrib-programoutput/">sphinxcontrib-programoutput</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference external" href="http://www.stack.nl/~dimitri/doxygen/">Doxygen</a></p></li>
+<li><p><a class="reference external" href="http://michaeljones.github.com/breathe/">Breathe</a></p></li>
+<li><p><a class="reference external" href="http://www.nongnu.org/dvipng/">dvipng</a></p></li>
+<li><p><a class="reference external" href="http://www.tug.org/texlive/">TeX Live</a>, including <code class="docutils literal notranslate"><span class="pre">pdflatex</span></code></p></li>
+</ul>
+</div></blockquote>
+<p>In Debian GNU/Linux, these dependencies can be installed by running:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ sudo apt-get install python-sphinx python-pip doxygen dvipng \
+    python-sphinxcontrib-programoutput texlive-full
+$ sudo pip install breathe
+</pre></div>
+</div>
+<p><a class="reference external" href="http://git-scm.com">Git</a> is used as the distributed version control system
+platform, and the source code is maintained at <a class="reference external" href="https://github.com/anders-dc/sphere/">Github</a>. <code class="docutils literal notranslate"><span class="pre">sphere</span></code> is licensed under the <a class="reference external" href="https://www.gnu.org/licenses/gpl.html">GNU
+Public License, v.3</a>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>All Debian GNU/Linux runtime, optional, and documentation dependencies
+mentioned above can be installed by executing the following command from the
+<code class="docutils literal notranslate"><span class="pre">doc/</span></code> folder:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ make install-debian-pkgs
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="obtaining-sphere">
+<h2>Obtaining sphere<a class="headerlink" href="#obtaining-sphere" title="Permalink to this headline">¶</a></h2>
+<p>The best way to keep up to date with subsequent updates, bugfixes and
+development, is to use the Git version control system. To obtain a local
+copy, execute:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ git clone git@github.com:anders-dc/sphere.git
+</pre></div>
+</div>
+</div>
+<div class="section" id="building-sphere">
+<h2>Building <code class="docutils literal notranslate"><span class="pre">sphere</span></code><a class="headerlink" href="#building-sphere" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">sphere</span></code> is built using <code class="docutils literal notranslate"><span class="pre">cmake</span></code>, the platform-specific C/C++ compilers,
+and <code class="docutils literal notranslate"><span class="pre">nvcc</span></code> from the Nvidia CUDA toolkit.</p>
+<p>If you instead plan to execute it on a Fermi GPU, change <code class="docutils literal notranslate"><span class="pre">set(GPU_GENERATION</span>
+<span class="pre">1)</span></code> to <code class="docutils literal notranslate"><span class="pre">set(GPU_GENERATION</span> <span class="pre">0</span></code> in <code class="docutils literal notranslate"><span class="pre">CMakeLists.txt</span></code>.</p>
+<p>In some cases the CMake FindCUDA module will have troubles locating the
+CUDA samples directory, and will complain about <code class="docutils literal notranslate"><span class="pre">helper_math.h</span></code> not being
+found.</p>
+<p>In that case, modify the <code class="docutils literal notranslate"><span class="pre">CUDA_SDK_ROOT_DIR</span></code> variable in
+<code class="docutils literal notranslate"><span class="pre">src/CMakeLists.txt</span></code> to the path where you installed the CUDA samples, and run
+<code class="docutils literal notranslate"><span class="pre">cmake</span> <span class="pre">.</span> <span class="pre">&amp;&amp;</span> <span class="pre">make</span></code> again. Alternatively, copy <code class="docutils literal notranslate"><span class="pre">helper_math.h</span></code> from the CUDA
+sample subdirectory <code class="docutils literal notranslate"><span class="pre">common/inc/helper_math.h</span></code> into the sphere <code class="docutils literal notranslate"><span class="pre">src/</span></code>
+directory, and run <code class="docutils literal notranslate"><span class="pre">cmake</span></code> and <code class="docutils literal notranslate"><span class="pre">make</span></code> again. Due to license restrictions,
+sphere cannot be distributed with this file.</p>
+<p>If you plan to run <code class="docutils literal notranslate"><span class="pre">sphere</span></code> on a Kepler GPU, execute the following commands
+from the root directory:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ cmake . &amp;&amp; make
+</pre></div>
+</div>
+<p>NOTE: If your system does not have a GCC compiler compatible with the installed
+CUDA version (e.g. GCC-5 for CUDA 8), you will see errors at the linker stage.
+In that case, try using <code class="docutils literal notranslate"><span class="pre">clang-3.8</span></code> as the C and C++ compiler instead:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ rm -rf CMakeCache.txt CMakeFiles/
+$ export CC=$(which clang-3.8) &amp;&amp; export CXX=$(which clang++-3.8) &amp;&amp; cmake . &amp;&amp; make
+</pre></div>
+</div>
+<p>After a successfull installation, the <code class="docutils literal notranslate"><span class="pre">sphere</span></code> executable will be located
+in the root folder. To make sure that all components are working correctly,
+execute:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ make test
+</pre></div>
+</div>
+<p>Disclaimer: On some systems the Navier-Stokes related tests will fail.  If you
+do encounter these problems, but do not plan on using the Navier Stokes solver
+for fluid dynamics, carry on.</p>
+<p>If successful the Makefiles will create the required data folders, object
+files, as well as the <code class="docutils literal notranslate"><span class="pre">sphere</span></code> executable in the root folder. Issue the
+following commands to check the executable:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ ./sphere --version
+</pre></div>
+</div>
+<p>The output should look similar to this:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>.-------------------------------------.
+|              _                      |
+|             | |                     |
+|    ___ _ __ | |__   ___ _ __ ___    |
+|   / __| &#39;_ \| &#39;_ \ / _ \ &#39;__/ _ \   |
+|   \__ \ |_) | | | |  __/ | |  __/   |
+|   |___/ .__/|_| |_|\___|_|  \___|   |
+|       | |                           |
+|       |_|           Version: 2.15   |
+`-------------------------------------´
+ A discrete-element method particle dynamics simulator.
+ Written by Anders Damsgaard, license GPLv3+.
+ https://adamsgaard.dk
+</pre></div>
+</div>
+<p>The documentation can be read in the <a class="reference external" href="http://docutils.sourceforge.net/docs/ref/rst/restructuredtext.html">reStructuredText</a>-format in
+the <code class="docutils literal notranslate"><span class="pre">doc/sphinx/</span></code> folder, or in the HTML or PDF formats in the folders
+<code class="docutils literal notranslate"><span class="pre">doc/html</span></code> and <code class="docutils literal notranslate"><span class="pre">doc/pdf</span></code>.</p>
+<p>Optionally, the documentation can be built using the following commands:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ cd doc/sphinx
+$ make html
+$ make latexpdf
+</pre></div>
+</div>
+<p>To see all available output formats, execute:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ make help
+</pre></div>
+</div>
+</div>
+<div class="section" id="updating-sphere">
+<h2>Updating sphere<a class="headerlink" href="#updating-sphere" title="Permalink to this headline">¶</a></h2>
+<p>To update your local version, type the following commands in the <code class="docutils literal notranslate"><span class="pre">sphere</span></code> root
+directory:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ git pull &amp;&amp; cmake . &amp;&amp; make
+</pre></div>
+</div>
+</div>
+<div class="section" id="work-flow">
+<h2>Work flow<a class="headerlink" href="#work-flow" title="Permalink to this headline">¶</a></h2>
+<p>After compiling the <code class="docutils literal notranslate"><span class="pre">sphere</span></code> binary, the procedure of a creating and handling
+a simulation is typically arranged in the following order:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Setup of particle assemblage, physical properties and conditions using the
+Python API (<code class="docutils literal notranslate"><span class="pre">python/sphere.py</span></code>).</p></li>
+<li><p>Execution of <code class="docutils literal notranslate"><span class="pre">sphere</span></code> software, which simulates the particle behavior as a
+function of time, as a result of the conditions initially specified in the
+input file.</p></li>
+<li><p>Inspection, analysis, interpretation and visualization of <code class="docutils literal notranslate"><span class="pre">sphere</span></code> output
+in Python, and/or scene rendering using the built-in ray tracer.</p></li>
+</ul>
+</div></blockquote>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Introduction and Installation</a><ul>
+<li><a class="reference internal" href="#requirements">Requirements</a></li>
+<li><a class="reference internal" href="#obtaining-sphere">Obtaining sphere</a></li>
+<li><a class="reference internal" href="#building-sphere">Building <code class="docutils literal notranslate"><span class="pre">sphere</span></code></a></li>
+<li><a class="reference internal" href="#updating-sphere">Updating sphere</a></li>
+<li><a class="reference internal" href="#work-flow">Work flow</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">The sphere documentation</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="dem.html"
+                        title="next chapter">Discrete element method</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/introduction.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="dem.html" title="Discrete element method"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="The sphere documentation"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">sphere 2.15-beta documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2014, Anders Damsgaard.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 2.2.0.
+    </div>
+  </body>
+</html>
